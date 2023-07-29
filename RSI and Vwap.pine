@@ -1,0 +1,56 @@
+//@version=5
+
+// Trailing stop percentage
+trailing_stop_percent = input.float(0.1, title="Trailing Stop Percentage") / 100
+
+// Strategy properties
+strategy_on = input(true, title="Strategy On/Off")
+order_size = input.int(100, title="Order Size")
+pyramiding = input.int(3, title="Pyramiding")
+slippage = input.int(5, title="Slippage (ticks)")
+commission = input.int(50, title="Commission (INR)")
+base_currency = currency.INR
+startTime = input.session("0930-1515", "Start Time")
+trailPoints = input.float(100.0, title="Trail Points")
+strategy("RSI and VWAP Strategy", overlay=true, commission_type=strategy.commission.cash_per_order, commission_value=50.0, initial_capital=100000, currency = base_currency, slippage = 5) //, pyramiding=3
+
+// Parameters
+rsiLength = input(14, title="RSI Length")
+overboughtLevel = input(80, title="Overbought Level")
+oversoldLevel = input(20, title="Oversold Level")
+
+// Calculate RSI
+rsiValue = ta.rsi(close, rsiLength)
+
+// Calculate VWAP
+vwapValue = ta.vwap(hlc3)
+
+// Buy and Sell conditions
+shouldSell = ta.crossover(rsiValue, overboughtLevel) and ta.crossover(close, vwapValue)
+shouldBuy = ta.crossunder(rsiValue, oversoldLevel)
+
+// Trailing stop value
+trailing_stop_points = close * trailing_stop_percent
+
+// Strategy orders
+if (strategy_on and time(timeframe.period, startTime))
+    if (shouldSell)
+        strategy.close("Buy Entry")
+        strategy.entry("Sell Entry", strategy.short, qty=order_size)
+        strategy.exit("Sell Exit", "Sell Entry", trail_points=trailing_stop_points, trail_offset=trailing_stop_points)
+
+    if (shouldBuy)
+        strategy.close("Sell Entry")
+        strategy.entry("Buy Entry", strategy.long, qty=order_size)
+        strategy.exit("Buy Exit", "Buy Entry", trail_points=trailing_stop_points, trail_offset=trailing_stop_points)
+
+// Exit all positions at the end of the intraday trading session
+
+//if (strategy_on and not time(timeframe.period, startTime))
+    //strategy.close_all()
+
+// Plot RSI and VWAP
+//plot(rsiValue, title="RSI", color=color.blue)
+//plot(vwapValue, title="VWAP", color=color.orange)
+//hline(overboughtLevel, "Overbought", color=color.red)
+//hline(oversoldLevel, "Oversold", color=color.green)
