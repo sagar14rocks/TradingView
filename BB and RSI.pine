@@ -1,0 +1,69 @@
+//@version=5
+slippage = 50
+strategy("Bollinger + RSI, Double Strategy (by ChartArt) v1.1", shorttitle="BB RSI Custom", overlay=true,commission_type=strategy.commission.percent, commission_value=0.1, initial_capital = 100000,pyramiding=0, calc_on_order_fills=true, calc_on_every_tick=true,slippage = slippage,default_qty_value=1,default_qty_type = strategy.fixed)
+
+// User Input for Trade Direction
+tradeDirection = input.string("Both", title="Trade Direction", options=["Both", "Long Only", "Short Only"])
+
+// Intraday option
+is_intraday = input(true, title="Is Intraday?")
+
+intraday_start = input.session("0930-1505", title="Intraday Session")
+
+// Trailing Stop Loss
+use_trailing_sl = input(true, title="Use Trailing Stop Loss?")
+trail_value = input.float(0.5, title="Trail Value", step=0.5)
+
+// RSI
+RSIlength = input.int(6, title="RSI Period Length")
+RSIoverSold = 50.0
+RSIoverBought = 50.0
+price = close
+vrsi = ta.rsi(price, RSIlength)
+
+// Bollinger Bands
+BBlength = input.int(200, minval=1, title="Bollinger Period Length")
+BBmult = 2.0
+BBbasis = ta.sma(price, BBlength)
+BBdev = BBmult * ta.stdev(price, BBlength)
+BBupper = BBbasis + BBdev
+BBlower = BBbasis - BBdev
+
+plot(BBbasis, color=color.aqua, title="Bollinger Bands SMA Basis Line")
+p1 = plot(BBupper, color=color.new(color.silver, 90), title="Bollinger Bands Upper Line")
+p2 = plot(BBlower, color=color.new(color.silver, 90), title="Bollinger Bands Lower Line")
+fill(p1, p2, color=color.new(color.silver, 90))
+
+// Colors
+switch1 = input(true, title="Enable Bar Color?")
+switch2 = input(true, title="Enable Background Color?")
+TrendColor = (vrsi > RSIoverBought and (price[1] > BBupper and price < BBupper) and BBbasis < BBbasis[1]) ? color.red : (vrsi < RSIoverSold and (price[1] < BBlower and price > BBlower) and BBbasis > BBbasis[1]) ? color.green : na
+plotshape(series=switch1 and TrendColor == color.red, color=color.red, style=shape.triangleup, location=location.belowbar, size=size.small)
+plotshape(series=switch1 and TrendColor == color.green, color=color.green, style=shape.triangledown, location=location.abovebar, size=size.small)
+bgcolor(switch2 ? color.new(TrendColor, 50) : na)
+
+// RSI + Bollinger Bands Strategy
+slippageTicks = 50
+
+longCondition = ta.crossover(vrsi, RSIoverSold) and ta.crossover(price, BBlower)
+shortCondition = ta.crossunder(vrsi, RSIoverBought) and ta.crossunder(price, BBupper)
+
+if (longCondition and (tradeDirection == "Both" or tradeDirection == "Long Only"))
+    strategy.entry("RSI_BB_L", strategy.long, stop=BBlower, oca_type=strategy.oca.cancel, comment="RSI_BB_L")
+    if (use_trailing_sl)
+        strategy.exit("Exit Long", from_entry="RSI_BB_L", trail_offset=trail_value, trail_points=trail_value)
+
+if (shortCondition and (tradeDirection == "Both" or tradeDirection == "Short Only"))
+    strategy.entry("RSI_BB_S", strategy.short, stop=BBupper, oca_type=strategy.oca.cancel, comment="RSI_BB_S")
+    if (use_trailing_sl)
+        strategy.exit("Exit Short", from_entry="RSI_BB_S", trail_offset=trail_value, trail_points=trail_value)
+
+// Exit conditions for Long Only and Short Only
+if (tradeDirection == "Long Only" and shortCondition)
+    strategy.close("RSI_BB_L")
+if (tradeDirection == "Short Only" and longCondition)
+    strategy.close("RSI_BB_S")
+
+// Close all positions at the end of the day if intraday is selected
+if (is_intraday and session.islastbar_regular)
+    strategy.close_all()
